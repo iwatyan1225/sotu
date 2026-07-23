@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Angle Workout Analytics - ホーム</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+    <header>
+        <h1>Multi-Angle Motion Analytics</h1>
+        <p>AI多画角解析によるトレーニングフォーム診断</p>
+    </header>
+
+    <div class="container" style="justify-content: center; align-items: center; min-height: 70vh;">
+        <div class="card home-card">
+            <h2>🎥 解析の設定</h2>
+            <p style="color: #8b949e; margin-bottom: 25px; line-height: 1.6;">
+                解析したい種目と撮影した動画の画角数を指定してください。
+            </p>
+
+            <!-- 種目の選択 -->
+            <div class="setting-group">
+                <label for="exerciseSelect" class="setting-label">🏋️ トレーニング種目:</label>
+                <select id="exerciseSelect" class="angle-select-box">
+                    <option value="bench_press">ベンチプレス</option>
+                    <option value="squat">スクワット</option>
+                    <option value="deadlift">デッドリフト</option>
+                    <option value="shoulder_press">ショルダープレス</option>
+                    <option value="general">汎用（その他の種目）</option>
+                </select>
+            </div>
+
+            <!-- 画角数の選択 -->
+            <div class="setting-group" style="margin-top: 15px;">
+                <label for="angleSelect" class="setting-label">📹 画角（カメラ）の数:</label>
+                <select id="angleSelect" class="angle-select-box">
+                    <option value="1">1画角 (標準解析)</option>
+                    <option value="2" selected>2画角 (正面 + 側面 推奨)</option>
+                    <option value="3">3画角 (正面 + 左右 など精密解析)</option>
+                </select>
+            </div>
+
+            <div style="margin-top: 30px;">
+                <button class="primary-btn" onclick="goToAnalysis()">次へ：動画を選択する ➔</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function goToAnalysis() {
+            const exercise = document.getElementById('exerciseSelect').value;
+            const angles = document.getElementById('angleSelect').value;
+            window.location.href = `/analysis?exercise=${exercise}&angles=${angles}`;
+        }
+    </script>
+</body>
+</html>

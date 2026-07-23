@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workout Motion Analytics - 解析</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* 個別アップロード領域のスタイル */
+        .upload-slots {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+        .upload-slot {
+            background: #161b22;
+            border: 1px dashed #30363d;
+            border-radius: 8px;
+            padding: 12px;
+            flex: 1;
+            min-width: 200px;
+            text-align: center;
+        }
+        .upload-slot label {
+            display: block;
+            font-size: 0.85rem;
+            color: #8b949e;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        .slot-btn {
+            background-color: #21262d;
+            color: #58a6ff;
+            border: 1px solid #30363d;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            width: 100%;
+        }
+        .file-name {
+            display: block;
+            font-size: 0.75rem;
+            color: #79c0ff;
+            margin-top: 6px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <a href="{{ url_for('home') }}" class="back-btn">← ホームへ戻る</a>
+            <h1>Multi-Angle Motion Analytics</h1>
+        </div>
+    </header>
+
+    <div class="upload-bar" style="flex-direction: column; align-items: stretch; gap: 10px;">
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <span id="exerciseBadge" class="angle-badge" style="background-color:#238636;">種目: --</span>
+            <span id="angleBadge" class="angle-badge">設定: --</span>
+        </div>
+
+        <!-- 画角数に応じて動的作成される個別の動画選択スロット -->
+        <div id="uploadSlots" class="upload-slots"></div>
+
+        <div style="text-align: center; margin-top: 5px;">
+            <button class="primary-btn" onclick="startMultiAngleAnalysis()" style="max-width: 300px;">
+                🚀 解析を開始する
+            </button>
+            <div id="uploadStatus" style="font-size: 0.85rem; color: #8b949e; margin-top: 8px;">
+                各アングルの動画を選択してください
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- 動画表示エリア -->
+        <div class="video-section">
+            <div id="videoGrid" class="video-grid">
+                <div id="placeholder" class="placeholder-box">
+                    <p id="placeholderText">それぞれの枠から動画を選択し、「解析を開始する」を押してください。</p>
+                </div>
+            </div>
+            
+            <div id="controls" style="display:none; margin-top: 15px; text-align: center;">
+                <button class="control-btn" onclick="playAll()">▶️ 全画角 同時再生</button>
+                <button class="control-btn" onclick="pauseAll()">⏸️ 一時停止</button>
+            </div>
+        </div>
+
+        <!-- レポート表示エリア -->
+        <div class="dashboard-section">
+            <div class="card summary-card">
+                <h2>📊 3Dマルチアングル 統合評価</h2>
+                
+                <div class="score-box">
+                    <span class="score-label">フォームスコア</span>
+                    <span id="scoreVal" class="score-value">--</span>
+                    <span class="score-unit">/ 100点</span>
+                </div>
+
+                <div class="stats-summary">
+                    <div class="stat-item">
+                        <span>解析画角数:</span>
+                        <strong id="angleCount">-- 画角</strong>
+                    </div>
+                    <div class="stat-item">
+                        <span id="lblMain">主関節 角度:</span>
+                        <strong id="valMain">-- deg</strong>
+                    </div>
+                    <div class="stat-item">
+                        <span id="lblSub">サブ関節 角度:</span>
+                        <strong id="valSub">-- deg</strong>
+                    </div>
+                </div>
+
+                <hr style="border-color:#30363d; margin:15px 0;">
+
+                <h3>🎯 統合アドバイス</h3>
+                <ul id="commentsList" class="comments-list">
+                    <li>動画を解析すると画角を統合した総合評価が出力されます。</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let videoElements = [];
+        let selectedFiles = {}; // 個別枠のファイルを保存するオブジェクト
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetAngles = parseInt(urlParams.get('angles')) || 2;
+        const currentExercise = urlParams.get('exercise') || 'general';
+
+        const exerciseNames = {
+            'bench_press': 'ベンチプレス',
+            'squat': 'スクワット',
+            'deadlift': 'デッドリフト',
+            'shoulder_press': 'ショルダープレス',
+            'general': '汎用トレーニング'
+        };
+
+        const angleLabels = [
+            '1. 正面（または斜め前）',
+            '2. 側面（真横）',
+            '3. 斜め後ろ・別角度'
+        ];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('exerciseBadge').innerText = `種目: ${exerciseNames[currentExercise] || currentExercise}`;
+            document.getElementById('angleBadge').innerText = `設定: ${targetAngles}画角`;
+
+            // 画角数に合わせてアップロード枠を生成
+            const slotsContainer = document.getElementById('uploadSlots');
+            slotsContainer.innerHTML = '';
+
+            for (let i = 0; i < targetAngles; i++) {
+                const labelText = angleLabels[i] || `${i + 1}. 動画`;
+                
+                const slot = document.createElement('div');
+                slot.className = 'upload-slot';
+                slot.innerHTML = `
+                    <label>📹 ${labelText}</label>
+                    <input type="file" id="file_slot_${i}" accept="video/*" style="display:none;" onchange="onFileSelected(${i})">
+                    <button type="button" class="slot-btn" onclick="document.getElementById('file_slot_${i}').click()">
+                        📁 動画を選択
+                    </button>
+                    <span id="file_name_${i}" class="file-name">未選択</span>
+                `;
+                slotsContainer.appendChild(slot);
+            }
+        });
+
+        // スマホで動画が選択された時の処理
+        function onFileSelected(index) {
+            const fileInput = document.getElementById(`file_slot_${index}`);
+            const nameSpan = document.getElementById(`file_name_${index}`);
+
+            if (fileInput.files && fileInput.files[0]) {
+                const file = fileInput.files[0];
+                selectedFiles[index] = file;
+                nameSpan.innerText = `✅ ${file.name}`;
+            }
+        }
+
+        // 解析APIの実行
+        function startMultiAngleAnalysis() {
+            const status = document.getElementById('uploadStatus');
+            const fileKeys = Object.keys(selectedFiles);
+
+            if (fileKeys.length === 0) {
+                alert("少なくとも1つの動画を選択してください。");
+                return;
+            }
+
+            const formData = new FormData();
+            fileKeys.forEach(key => {
+                formData.append('videos', selectedFiles[key]);
+            });
+            formData.append('exercise', currentExercise);
+
+            status.innerText = `⏳ ${fileKeys.length}つの動画の動作開始位置を特定＆同期解析中...`;
+
+            fetch('/analyze_multi_angle', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.message === "Success") {
+                    status.innerText = "✅ 全画角の同期・平均化が完了しました！";
+
+                    const grid = document.getElementById('videoGrid');
+                    grid.innerHTML = "";
+                    videoElements = [];
+
+                    data.videos.forEach((url) => {
+                        const v = document.createElement('video');
+                        v.src = url;
+                        v.controls = true;
+                        v.muted = true;      // スマホ再生互換のため
+                        v.playsinline = true;
+                        v.width = "100%";
+                        v.style.borderRadius = "8px";
+                        grid.appendChild(v);
+                        videoElements.push(v);
+                    });
+
+                    document.getElementById('controls').style.display = "block";
+
+                    const r = data.report;
+                    document.getElementById('scoreVal').innerText = r.score;
+                    document.getElementById('angleCount').innerText = r.angle_count + " 画角";
+                    document.getElementById('lblMain').innerText = r.label_main + ":";
+                    document.getElementById('valMain').innerText = r.val_main + " deg";
+                    document.getElementById('lblSub').innerText = r.label_sub + ":";
+                    document.getElementById('valSub').innerText = r.val_sub + " deg";
+
+                    const list = document.getElementById('commentsList');
+                    list.innerHTML = "";
+                    r.comments.forEach(c => {
+                        const li = document.createElement('li');
+                        li.innerText = c;
+                        list.appendChild(li);
+                    });
+
+                } else {
+                    status.innerText = "❌ 解析に失敗しました。";
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                status.innerText = "❌ エラーが発生しました。";
+            });
+        }
+
+        function playAll() {
+            videoElements.forEach(v => {
+                v.currentTime = 0;
+                v.play();
+            });
+        }
+
+        function pauseAll() {
+            videoElements.forEach(v => v.pause());
+        }
+    </script>
+</body>
+</html>
